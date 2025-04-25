@@ -7,6 +7,8 @@
 #include <vector>
 #include <unistd.h>
 
+using namespace std;
+
 struct Point {
     float x, y, z;
 };
@@ -25,6 +27,8 @@ void calculate_pitch_yaw(const Point &spotlight, const Point &target, float &pit
     
     pitch = std::atan2(dz, std::sqrt(dx * dx + dy * dy));  // vertical angle
     yaw = std::atan2(dy, dx);  // horizontal angle
+    std::cout << "Pitch! " << pitch << endl;
+    std::cout << "Yaw! " << yaw << endl;
 }
 
 // Normalize angle to DMX value
@@ -52,24 +56,29 @@ bool parse_coordinates(const std::string &filename, Tag &tag) {
 }
 
 int main() {
-    ola::InitLogging(ola::OLA_LOG_WARN);
+    ola::InitLogging(ola::OLA_LOG_WARN, ola::OLA_LOG_STDERR);
     ola::client::StreamingClient ola_client;
     if (!ola_client.Setup()) {
         std::cerr << "OLA client setup failed." << std::endl;
         return 1;
     }
 
-    const Point spotlight = {0.0f, 0.0f, 2.0f};  // spotlight is 2 meters above center
+    const Point spotlight = {0.76f, -4.0f, 1.0f};  // spotlight is 2 meters above center
     Tag tracked_tag;
 
-    const unsigned int universe = 1;
-    const unsigned int pan_channel = 1;   // DMX channels start from 1
-    const unsigned int tilt_channel = 2;
+    const unsigned int universe = 0;
+    const unsigned int pan_channel = 2;   // DMX channels start from 1
+    const unsigned int tilt_channel = 4;
     const float pitch_range = M_PI / 2.0f;  // +/- 90 degrees
     const float yaw_range = M_PI;          // +/- 180 degrees
-
+    
+    ola::DmxBuffer buffer;
+    buffer.Blackout();
+    usleep(1150000);
+    buffer.SetChannel(2, 87);
+    usleep(1150000);
     while (true) {
-        if (!parse_coordinates("teraterm.txt", tracked_tag)) {
+        if (!parse_coordinates("minicomOutput.txt", tracked_tag)) {
             std::cerr << "Failed to parse coordinates." << std::endl;
             usleep(100000);
             continue;
@@ -80,16 +89,17 @@ int main() {
 
         uint8_t dmx_pan = angle_to_dmx(yaw, yaw_range);
         uint8_t dmx_tilt = angle_to_dmx(pitch, pitch_range);
+        std::cout << "Pan! " << dmx_pan << endl;
+        std::cout << "Tilt! " << dmx_tilt << endl;
 
-        ola::DmxBuffer buffer;
-        buffer.Set(pan_channel - 1, dmx_pan);
-        buffer.Set(tilt_channel - 1, dmx_tilt);
+        buffer.SetChannel(pan_channel, dmx_pan);
+        buffer.SetChannel(tilt_channel, dmx_tilt);
 
         if (!ola_client.SendDmx(universe, buffer)) {
             std::cerr << "Failed to send DMX." << std::endl;
         }
 
-        usleep(50000); // 20 fps
+        usleep(1150000); // 20 fps
     }
 
     return 0;
