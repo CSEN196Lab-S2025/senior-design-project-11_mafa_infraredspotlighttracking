@@ -6,6 +6,9 @@
 #include <cmath>
 #include <vector>
 #include <unistd.h>
+#include <chrono>
+#include <thread>
+#include <string.h>
 
 using namespace std;
 
@@ -18,14 +21,15 @@ struct Tag {
     Point position;
 };
 
+std::streampos last_pos = 0;
+
 // Convert 3D coordinates to pitch and yaw
 void calculate_pitch_yaw(const Point &spotlight, const Point &target, float &pitch, float &yaw) {
     float dx = target.x - spotlight.x;
     float dy = target.y - spotlight.y;
     float dz = target.z - spotlight.z;
     float distance = std::sqrt(dx * dx + dy * dy + dz * dz);
-    
-    pitch = std::atan2(dz, std::sqrt(dx * dx + dy * dy));  // vertical angle
+    pitch = std::atan2(dz, std::sqrt(dx * dx + dy * dy));  // vertical angle //change dy to dz???
     yaw = std::atan2(dy, dx);  // horizontal angle
     std::cout << "Pitch! " << pitch << endl;
     std::cout << "Yaw! " << yaw << endl;
@@ -33,25 +37,14 @@ void calculate_pitch_yaw(const Point &spotlight, const Point &target, float &pit
 
 // Normalize angle to DMX value
 uint8_t angle_to_dmx(float angle, float range) {
-    float normalized = (angle + range / 2.0f) / range;
-    return static_cast<uint8_t>(std::max(0.0f, std::min(1.0f, normalized)) * 255);
+    float normalized = (angle + range) / (2 * range);
+    cout << "normal: " << normalized << endl;
+    return normalized * 255;
 }
 
 // Parse coordinates file
 bool parse_coordinates(const std::string &filename, Tag &tag) {
-    std::ifstream file(filename);
-    if (!file.is_open()) return false;
 
-    std::string line;
-    while (std::getline(file, line)) {
-        char id[5];
-        float x, y, z;
-        if (sscanf(line.c_str(), "POS,0,%4s,%f,%f,%f", id, &x, &y, &z) == 4) {
-            tag.id = id;
-            tag.position = {x, y, z};
-            return true;
-        }
-    }
     return false;
 }
 
@@ -63,32 +56,51 @@ int main() {
         return 1;
     }
 
-    const Point spotlight = {0.76f, -4.0f, 1.0f};  // spotlight is 2 meters above center
+    const Point spotlight = {-0.76f, 1.0f, 4.0f}; 
     Tag tracked_tag;
 
     const unsigned int universe = 0;
-    const unsigned int pan_channel = 2;   // DMX channels start from 1
-    const unsigned int tilt_channel = 4;
+    const unsigned int pan_channel = 1;   // DMX channels start from 1
+    const unsigned int tilt_channel = 3;
     const float pitch_range = M_PI / 2.0f;  // +/- 90 degrees
     const float yaw_range = M_PI;          // +/- 180 degrees
     
+    string filename = "minicomOutput.txt";
     ola::DmxBuffer buffer;
     buffer.Blackout();
     usleep(1150000);
-    buffer.SetChannel(2, 87);
+    buffer.SetChannel(1, 87);
     usleep(1150000);
-    while (true) {
-        if (!parse_coordinates("minicomOutput.txt", tracked_tag)) {
-            std::cerr << "Failed to parse coordinates." << std::endl;
-            usleep(100000);
-            continue;
+    std::ifstream file(filename);
+    while(true){
+        file.open(filename, std::ios::in);
+        if (!file.is_open()){ 
+            cout << "no file :(" << endl;
+            return false;
         }
+        else{
+            //file.seekg(last_pos);
+            std::string line;
 
+            while (std::getline(file, line)) {
+                //cout << "line" << endl;
+                char id[5];
+                float x, y, z;
+                if (sscanf(line.c_str(), "POS,0,%4s,%f,%f,%f", id, &x, &y, &z)) {
+                    tracked_tag.id = id;
+                    if(x == x || y == y || z == z){
+                        tracked_tag.position = {x, y, z};
+                    }
+                    //cout << tracked_tag.position.x << ", " << tracked_tag.position.y << ", " << tracked_tag.position.z << endl;
+                }
+            }
+            file.close();
+        }
         float pitch, yaw;
         calculate_pitch_yaw(spotlight, tracked_tag.position, pitch, yaw);
 
-        uint8_t dmx_pan = angle_to_dmx(yaw, yaw_range);
-        uint8_t dmx_tilt = angle_to_dmx(pitch, pitch_range);
+        unsigned int dmx_pan = angle_to_dmx(yaw, yaw_range);
+        unsigned int dmx_tilt = angle_to_dmx(pitch, pitch_range);
         std::cout << "Pan! " << dmx_pan << endl;
         std::cout << "Tilt! " << dmx_tilt << endl;
 
@@ -98,9 +110,12 @@ int main() {
         if (!ola_client.SendDmx(universe, buffer)) {
             std::cerr << "Failed to send DMX." << std::endl;
         }
-
-        usleep(1150000); // 20 fps
+        
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
+    
+    
+    
 
     return 0;
 }
