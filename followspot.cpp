@@ -9,6 +9,8 @@
 #include <chrono>
 #include <thread>
 #include <string.h>
+#include <cstdint>
+#include <algorithm>
 
 using namespace std;
 
@@ -29,17 +31,36 @@ void calculate_pitch_yaw(const Point &spotlight, const Point &target, float &pit
     float dy = target.y - spotlight.y;
     float dz = target.z - spotlight.z;
     float distance = std::sqrt(dx * dx + dy * dy + dz * dz);
-    pitch = std::atan2(dz, std::sqrt(dx * dx + dy * dy));  // vertical angle //change dy to dz???
+    pitch = std::atan2(-dz, std::sqrt(dx * dx + dy * dy));  // vertical angle //change dy to dz???
     yaw = std::atan2(dy, dx);  // horizontal angle
     std::cout << "Pitch! " << pitch << endl;
     std::cout << "Yaw! " << yaw << endl;
 }
 
 // Normalize angle to DMX value
-uint8_t angle_to_dmx(float angle, float range) {
-    float normalized = (angle + range) / (2 * range);
+uint8_t pitch_to_dmx(float angle, float range) {
+    float degree = angle *(180/M_PI);
+    cout << "PITCH DEGREE: " << degree << endl;
+    degree = std::clamp(degree,-135.0f,135.0f);
+    //degree = -55;
+    //float normalized = (((degree + 90.0f)*(127.0f-43.0f))/(180.0f));
+    float normalized = -degree + 27;
     cout << "normal: " << normalized << endl;
-    return normalized * 255;
+    //dmx -= 95;
+    return normalized;
+}
+
+uint8_t yaw_to_dmx(float angle, float range) {
+    float degree = angle *(180/M_PI);
+    
+    cout << "YAW DEGREE: " << degree << endl;
+    range = range *(180/M_PI);
+    range = 230;
+    cout << "YAW RANGE: " << range << endl;
+    //degree = std::clamp(degree,-180.0f,180.0f);
+    float normalized = (degree + range) / (2*range);
+    cout << "normal: " << normalized << endl;
+    return normalized * 255.0f;
 }
 
 // Parse coordinates file
@@ -56,7 +77,7 @@ int main() {
         return 1;
     }
 
-    const Point spotlight = {-0.76f, 1.0f, 4.0f}; 
+    const Point spotlight = {-0.76f, 4.0f, 1.0f}; 
     Tag tracked_tag;
 
     const unsigned int universe = 0;
@@ -69,7 +90,7 @@ int main() {
     ola::DmxBuffer buffer;
     buffer.Blackout();
     usleep(1150000);
-    buffer.SetChannel(1, 87);
+    //buffer.SetChannel(1, 87);
     usleep(1150000);
     std::ifstream file(filename);
     while(true){
@@ -99,8 +120,8 @@ int main() {
         float pitch, yaw;
         calculate_pitch_yaw(spotlight, tracked_tag.position, pitch, yaw);
 
-        unsigned int dmx_pan = angle_to_dmx(yaw, yaw_range);
-        unsigned int dmx_tilt = angle_to_dmx(pitch, pitch_range);
+        unsigned int dmx_pan = yaw_to_dmx(yaw, yaw_range);
+        unsigned int dmx_tilt = pitch_to_dmx(pitch, pitch_range);
         std::cout << "Pan! " << dmx_pan << endl;
         std::cout << "Tilt! " << dmx_tilt << endl;
 
