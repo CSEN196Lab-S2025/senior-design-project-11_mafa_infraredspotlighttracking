@@ -23,8 +23,10 @@ struct Tag {
     Point position;
 };
 
-std::streampos last_pos = 0;
-
+float lerp(float a, float b, float t) {
+    return a + t * (b - a);
+}
+ 
 // Convert 3D coordinates to pitch and yaw
 void calculate_pitch_yaw(const Point &spotlight, const Point &target, float &pitch, float &yaw) {
     float dx = target.x - spotlight.x;
@@ -40,27 +42,45 @@ void calculate_pitch_yaw(const Point &spotlight, const Point &target, float &pit
 // Normalize angle to DMX value
 uint8_t pitch_to_dmx(float angle, float range) {
     float degree = angle *(180/M_PI);
+    
     cout << "PITCH DEGREE: " << degree << endl;
-    degree = std::clamp(degree,-135.0f,135.0f);
-    //degree = -55;
+    //degree = std::clamp(degree,-135.0f,135.0f);
+    //degree = -55;s
     //float normalized = (((degree + 90.0f)*(127.0f-43.0f))/(180.0f));
-    float normalized = -degree + 27;
+    //float normalized = -degree + 27;
+    degree = 33 + degree;
+    // if negative 244 + degree;
+    float normalized = (degree / 270) * 255;
     cout << "normal: " << normalized << endl;
-    //dmx -= 95;
+
     return normalized;
-}
+}  
 
 uint8_t yaw_to_dmx(float angle, float range) {
-    float degree = angle *(180/M_PI);
+    // float degree = angle *(180/M_PI);
     
+    // cout << "YAW DEGREE: " << degree << endl;
+    // range = range *(180/M_PI);
+    // range = 180;
+    // cout << "YAW RANGE: " << range << endl;
+    // //degree = std::clamp(degree,-180.0f,180.0f);
+    // //float normalized = (degree + range) / (2*range);
+    // float normalized = (44 + (degree * (88.0f/270.0f)));
+    // cout << "normalized: " << normalized << endl;
+    // normalized = normalized + 32;
+    // cout << "normal: " << normalized << endl;
+    // return normalized;
+    // //return normalized * 255.0f;
+
+    float degree = angle  * (180/M_PI);
     cout << "YAW DEGREE: " << degree << endl;
-    range = range *(180/M_PI);
-    range = 230;
-    cout << "YAW RANGE: " << range << endl;
-    //degree = std::clamp(degree,-180.0f,180.0f);
+
+    degree = degree + 16;
+    cout << "new yaw degree: " << degree << endl;
     float normalized = (degree + range) / (2*range);
+    normalized = (normalized) * 255;
     cout << "normal: " << normalized << endl;
-    return normalized * 255.0f;
+    return normalized;
 }
 
 // Parse coordinates file
@@ -77,21 +97,23 @@ int main() {
         return 1;
     }
 
-    const Point spotlight = {-0.76f, 4.0f, 1.0f}; 
+    const Point spotlight = {-0.76f, 4.0f, 1.35f}; 
     Tag tracked_tag;
 
     const unsigned int universe = 0;
     const unsigned int pan_channel = 1;   // DMX channels start from 1
     const unsigned int tilt_channel = 3;
     const float pitch_range = M_PI / 2.0f;  // +/- 90 degrees
-    const float yaw_range = M_PI;          // +/- 180 degrees
+    const float yaw_range = 180;          // +/- 180 degrees
     
     string filename = "minicomOutput.txt";
     ola::DmxBuffer buffer;
     buffer.Blackout();
     usleep(1150000);
-    //buffer.SetChannel(1, 87);
-    usleep(1150000);
+
+    static float current_pan = 0;
+    static float current_tilt = 0;
+
     std::ifstream file(filename);
     while(true){
         file.open(filename, std::ios::in);
@@ -125,8 +147,13 @@ int main() {
         std::cout << "Pan! " << dmx_pan << endl;
         std::cout << "Tilt! " << dmx_tilt << endl;
 
-        buffer.SetChannel(pan_channel, dmx_pan);
-        buffer.SetChannel(tilt_channel, dmx_tilt);
+        current_pan = lerp(current_pan, dmx_pan, 0.1f);
+        current_tilt = lerp(current_tilt, dmx_tilt, 0.1f);
+        std::cout << "Current Pan! " << current_pan << endl;
+        std::cout << "Current Tilt! " << current_tilt << endl;
+
+        buffer.SetChannel(pan_channel, current_pan);
+        buffer.SetChannel(tilt_channel, current_tilt);
 
         if (!ola_client.SendDmx(universe, buffer)) {
             std::cerr << "Failed to send DMX." << std::endl;
